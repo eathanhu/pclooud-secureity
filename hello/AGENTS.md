@@ -1,4 +1,0 @@
-- **Ask before assuming** — If there is any doubt or ambiguity in the user's request, ask the user for clarification before proceeding. Get a detailed understanding of what they want.
-- **Research when stuck** — If you cannot find a solution on your own , then do web serach for it.
-- **Worst-case fallback** — If you don't understand the existing codebase or repo patterns, ask the user for examples or explanation of how things work in their repo.
-- **ask permission** — ask permission to make changes in the file, if permission is nt given then dont change anything in the file
