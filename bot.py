@@ -6,11 +6,12 @@ from telegram.ext import (
     ContextTypes,
 )
 from config import BOT_TOKEN, ADMIN_CHAT_ID
-from models import approve_user, deny_user, get_user
+from models import approve_user, deny_user, update_user_login
 
 
 async def send_registration_alert(email, ip, browser, os_name, device, location):
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    from telegram import Bot
+    bot = Bot(token=BOT_TOKEN)
 
     text = (
         f"New Registration Request\n\n"
@@ -30,18 +31,13 @@ async def send_registration_alert(email, ip, browser, os_name, device, location)
         ]
     ])
 
-    await app.bot.send_message(
-        chat_id=ADMIN_CHAT_ID,
-        text=text,
-        reply_markup=keyboard,
-    )
-
-    await app.initialize()
-    await app.shutdown()
+    await bot.send_message(chat_id=ADMIN_CHAT_ID, text=text, reply_markup=keyboard)
+    await bot.close()
 
 
 async def send_login_alert(email, ip, browser, os_name, device, location, reason):
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    from telegram import Bot
+    bot = Bot(token=BOT_TOKEN)
 
     text = (
         f"Login Blocked\n\n"
@@ -62,14 +58,8 @@ async def send_login_alert(email, ip, browser, os_name, device, location, reason
         ]
     ])
 
-    await app.bot.send_message(
-        chat_id=ADMIN_CHAT_ID,
-        text=text,
-        reply_markup=keyboard,
-    )
-
-    await app.initialize()
-    await app.shutdown()
+    await bot.send_message(chat_id=ADMIN_CHAT_ID, text=text, reply_markup=keyboard)
+    await bot.close()
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -81,24 +71,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if action == "accept":
         approve_user(email)
-        await query.edit_message_text(
-            f"User {email} has been APPROVED."
-        )
+        await query.edit_message_text(f"User {email} has been APPROVED.")
     elif action == "deny":
         deny_user(email)
-        await query.edit_message_text(
-            f"User {email} has been DENIED."
-        )
+        await query.edit_message_text(f"User {email} has been DENIED.")
     elif action == "allow":
         approve_user(email)
-        await query.edit_message_text(
-            f"Login for {email} has been ALLOWED. IP/device updated."
-        )
+        await query.edit_message_text(f"Login for {email} ALLOWED. IP/device updated.")
     elif action == "block":
         deny_user(email)
-        await query.edit_message_text(
-            f"Login for {email} has been BLOCKED."
-        )
+        await query.edit_message_text(f"Login for {email} has been BLOCKED.")
 
 
 def run_bot_background():
@@ -108,4 +90,16 @@ def run_bot_background():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CallbackQueryHandler(handle_callback))
 
-    loop.run_until_complete(app.run_polling(drop_pending_updates=True))
+    loop.run_until_complete(app.initialize())
+    loop.run_until_complete(app.start())
+    loop.run_until_complete(app.updater.start_polling(drop_pending_updates=True))
+
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.run_until_complete(app.updater.stop())
+        loop.run_until_complete(app.stop())
+        loop.run_until_complete(app.shutdown())
+        loop.close()
