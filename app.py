@@ -78,11 +78,13 @@ def get_location(ip):
 def send_tg_alert(coro):
     try:
         loop = asyncio.new_event_loop()
-        loop.run_until_complete(coro)
+        result = loop.run_until_complete(coro)
         loop.close()
-        print("[TG] Alert sent successfully")
+        print(f"[TG] Alert sent successfully: {result}")
     except Exception as e:
-        print(f"[TG] Alert error: {e}")
+        print(f"[TG] ALERT ERROR: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # =====================================================
@@ -108,6 +110,20 @@ def index():
     if "user" in session:
         return redirect(url_for("files"))
     return redirect(url_for("login"))
+
+
+@app.route("/test-bot")
+def test_bot():
+    try:
+        send_tg_alert(
+            send_login_alert(
+                "test@example.com", "1.2.3.4", "Chrome", "Windows",
+                "Desktop", "Test City", "This is a test alert"
+            )
+        )
+        return "Alert sent! Check your Telegram."
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @app.route("/register", methods=["GET", "POST"])
