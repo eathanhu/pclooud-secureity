@@ -75,6 +75,16 @@ def get_location(ip):
     return "Unknown"
 
 
+def send_tg_alert(coro):
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(coro)
+        loop.close()
+        print("[TG] Alert sent successfully")
+    except Exception as e:
+        print(f"[TG] Alert error: {e}")
+
+
 # =====================================================
 # AUTH MIDDLEWARE
 # =====================================================
@@ -125,15 +135,11 @@ def register():
         location = get_location(ip)
 
         create_user(email, password, ip, ua, browser, os_name, device, location)
+        print(f"[REG] New user: {email} | IP: {ip} | {browser} on {os_name}")
 
-        try:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(
-                send_registration_alert(email, ip, browser, os_name, device, location)
-            )
-            loop.close()
-        except Exception as e:
-            print(f"Telegram alert error: {e}")
+        send_tg_alert(
+            send_registration_alert(email, ip, browser, os_name, device, location)
+        )
 
         flash("Registration submitted! Wait for admin approval.", "success")
         return redirect(url_for("login"))
@@ -159,6 +165,14 @@ def login():
                 email, ip, ua, browser, os_name, device, location,
                 "failed", "Wrong credentials"
             )
+            print(f"[LOGIN] FAILED: {email} | IP: {ip}")
+
+            send_tg_alert(
+                send_login_alert(
+                    email, ip, browser, os_name, device, location,
+                    "Wrong credentials"
+                )
+            )
 
             flash("Invalid email or password.", "error")
             return render_template("login.html")
@@ -179,45 +193,41 @@ def login():
         stored_ip = user["ip_address"]
         stored_ua = user["user_agent"]
 
-        if stored_ip and stored_ip != ip:
+        is_new_ip = stored_ip and stored_ip != ip
+        is_new_device = stored_ua and stored_ua != ua
+
+        if is_new_ip or is_new_device:
+            reason = []
+            if is_new_ip:
+                reason.append(f"New IP (was {stored_ip})")
+            if is_new_device:
+                reason.append("New device")
+            reason_str = " + ".join(reason)
+
             log_login_attempt(
                 email, ip, ua, browser, os_name, device, location,
-                "blocked", f"New IP (was {stored_ip})"
+                "blocked", reason_str
             )
+            print(f"[LOGIN] BLOCKED: {email} | {reason_str}")
 
-            try:
-                loop = asyncio.new_event_loop()
-                loop.run_until_complete(
-                    send_login_alert(email, ip, browser, os_name, device, location,
-                                     f"New IP detected (was {stored_ip})")
+            send_tg_alert(
+                send_login_alert(
+                    email, ip, browser, os_name, device, location, reason_str
                 )
-                loop.close()
-            except:
-                pass
+            )
 
             flash("New device/IP detected. Admin approval required.", "info")
             return render_template("login.html")
 
-        if stored_ua and stored_ua != ua:
-            log_login_attempt(
-                email, ip, ua, browser, os_name, device, location,
-                "blocked", "New device/user-agent"
-            )
-
-            try:
-                loop = asyncio.new_event_loop()
-                loop.run_until_complete(
-                    send_login_alert(email, ip, browser, os_name, device, location,
-                                     "New device detected")
-                )
-                loop.close()
-            except:
-                pass
-
-            flash("New device detected. Admin approval required.", "info")
-            return render_template("login.html")
-
         update_user_login(email, ip, ua, browser, os_name, device, location)
+        print(f"[LOGIN] SUCCESS: {email} | IP: {ip} | {browser} on {os_name}")
+
+        send_tg_alert(
+            send_login_alert(
+                email, ip, browser, os_name, device, location,
+                "Successful login"
+            )
+        )
 
         session["user"] = email
         return redirect(url_for("files"))
@@ -277,7 +287,9 @@ def download(filepath):
 # =====================================================
 
 if __name__ == "__main__":
+    print("[BOT] Starting Telegram bot...")
     bot_thread = threading.Thread(target=run_bot_background, daemon=True)
     bot_thread.start()
 
+    print("[APP] Starting Flask server on port 5000...")
     app.run(host="0.0.0.0", port=5000, debug=False)
